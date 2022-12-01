@@ -11,7 +11,7 @@ export {
   METHOD_RPC_NEW_AUCTION,
   METHOD_SEARCHER_BID,
   AUCTION_DURATION,
-} from '../protocol/constants.ts'
+} from 'https://raw.githubusercontent.com/nectar-cash/protocol/main/constants.ts'
 export type {
   PayloadAny,
   PayloadAuctionBidRecipient,
@@ -23,4 +23,4 @@ export type {
   TransactionBundle,
   UnknownTransactionBundle,
   BundleTransactionHash,
-} from '../protocol/types.ts'
+} from 'https://raw.githubusercontent.com/nectar-cash/protocol/main/types.ts'
