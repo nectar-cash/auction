@@ -16,11 +16,11 @@ import {
   METHOD_SEARCHER_BID,
 } from './deps.ts'
 
-const env = config()
+const env = { ...config(), ...Deno.env.toObject() }
 import AuctionController from './AuctionController.ts'
 
 const app = new Application()
-const port = parseInt(Deno.env.get('PORT') || '8000')
+const port = parseInt(env['PORT'] || '8000')
 
 const router = new Router()
 
