@@ -15,6 +15,7 @@ import {
   METHOD_RPC_NEW_AUCTION,
   METHOD_SEARCHER_BID,
 } from './deps.ts'
+import db from './db.ts'
 
 const env = { ...config(), ...Deno.env.toObject() }
 import AuctionController from './AuctionController.ts'
@@ -28,6 +29,10 @@ const registeredRPCs: { [address: string]: WebSocket } = {}
 const registeredSearchers: { [address: string]: WebSocket } = {}
 
 const auctionController = new AuctionController()
+
+router.get('/health', (ctx) => {
+  ctx.response.body = 'ok'
+})
 
 router.get('/rpc', (ctx) => {
   if (!ctx.isUpgradable) {
@@ -83,8 +88,8 @@ router.get('/rpc', (ctx) => {
           ws.send(JSON.stringify(auctionResultPayload))
           // TODO delete hash from auction controller
         }
-      } catch {
-        console.error('cannot parse message', m.data)
+      } catch (e) {
+        console.error('fail during rpc message', e, m.data)
       }
       ws.send(m.data as string)
     }
@@ -125,8 +130,8 @@ router.get('/searcher', (ctx) => {
           console.log('\nReceived a bid from', address, 'with', bundle.length, 'items')
           auctionController.bidOnTransaction(address, bundle)
         }
-      } catch {
-        console.error('cannot parse message', m.data)
+      } catch (e) {
+        console.error('cannot parse message, with error:', e, m.data)
       }
     }
     ws.onclose = () => console.log('Disconncted from searcher', address)
@@ -135,6 +140,8 @@ router.get('/searcher', (ctx) => {
 
 app.use(router.routes())
 app.use(router.allowedMethods())
+
+await db.sync()
 
 console.log(`Auction House is running at http://localhost:${port}`)
 await app.listen({ port: port })

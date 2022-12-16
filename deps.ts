@@ -4,6 +4,8 @@ export { config } from 'https://deno.land/x/dotenv@v3.2.0/mod.ts'
 export { BigNumber, ethers } from 'npm:ethers@^5.7.2'
 export type { BigNumberish } from 'npm:ethers@^5.7.2'
 
+export { Database, PostgresConnector, Model, DataTypes } from "https://deno.land/x/denodb@v1.1.0/mod.ts";
+
 export {
   METHOD_AUCTION_BID_RECIPIENT,
   METHOD_AUCTION_RESULT,

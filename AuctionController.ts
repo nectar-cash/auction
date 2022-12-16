@@ -1,3 +1,4 @@
+import { Payment } from './models.ts'
 import { BigNumber, BigNumberish, ethers } from './deps.ts'
 import { config } from './deps.ts'
 
@@ -61,6 +62,24 @@ export default class AuctionController {
     }
 
     console.log('Highest Bid!', highestBid)
+    const bid = BigNumber.from(highestBid.bid)
+
+    const auctionAddress = env['AUCTION_ADDRESS']
+    const userAddress = tx.from || ethers.constants.AddressZero // TODO check for 'from' before accepting auction
+    const auctionAllocationValue = bid.mul(5).div(100)
+    const userAllocationValue = bid.sub(auctionAllocationValue)
+
+    await Payment.create([
+      {
+        address: userAddress,
+        value: userAllocationValue.toString()
+      },
+      {
+        address: auctionAddress,
+        value: auctionAllocationValue.toString()
+      }
+    ])
+
     return {
       hasWinner: true,
       bundle: highestBid.bundle,
@@ -69,6 +88,7 @@ export default class AuctionController {
 
   bidOnTransaction(bidder: string, bundle: UnknownTransactionBundle) {
     console.log('Bundle from:', bidder, bundle)
+    const auctionAddress = env['AUCTION_ADDRESS']
 
     let payments = BigNumber.from(0)
     let userTxIndex = -1
@@ -84,7 +104,7 @@ export default class AuctionController {
       if (item.signedTransaction) {
         const parsedTx = ethers.utils.parseTransaction(item.signedTransaction)
         // console.log('parsed tx', parsedTx)
-        if (parsedTx.to && parsedTx.to === env['AUCTION_ADDRESS'] && parsedTx.data === '0x') {
+        if (parsedTx.to && parsedTx.to === auctionAddress && parsedTx.data === '0x') {
           // console.log('parsed tx data', parsedTx.data)
           const txValue = BigNumber.from(parsedTx.value)
           payments = payments.add(txValue)

@@ -1,4 +1,5 @@
-FROM denoland/deno:1.28.3
+FROM denoland/deno:1.29.1
+RUN apt-get update; apt-get install curl -y
 
 EXPOSE 8000
 WORKDIR /app
