@@ -1,4 +1,4 @@
-import { Application, Router } from './deps.ts'
+import { Application, ethers, Router } from './deps.ts'
 import { config } from './deps.ts'
 
 import {
@@ -19,6 +19,9 @@ import db from './db.ts'
 
 const env = { ...config(), ...Deno.env.toObject() }
 import AuctionController from './AuctionController.ts'
+import deposit from './Depositor.ts'
+import confirmTxs from './Confirmer.ts'
+import reportAddressEvent from './EventReporter.ts'
 
 const app = new Application()
 const port = parseInt(env['PORT'] || '8000')
@@ -29,6 +32,18 @@ const registeredRPCs: { [address: string]: WebSocket } = {}
 const registeredSearchers: { [address: string]: WebSocket } = {}
 
 const auctionController = new AuctionController()
+
+let doneWithDeposit = true
+const depositIfReady = async () => {
+  if (doneWithDeposit) {
+    doneWithDeposit = false
+    const status = await deposit()
+    doneWithDeposit = status
+  }
+}
+
+setInterval(depositIfReady, 60 * 1000) // every minute
+setInterval(confirmTxs, 12 * 1000) // every block
 
 router.get('/health', (ctx) => {
   ctx.response.body = 'ok'
@@ -51,10 +66,15 @@ router.get('/rpc', (ctx) => {
       try {
         const body = JSON.parse(m.data) as PayloadAny
         const { method, data } = body
-        console.log('\nRPC message:', address, method)
+        // console.log('\nRPC message:', address, method)
         if (method === METHOD_RPC_NEW_AUCTION) {
           const { hash, tx, options } = data as PayloadRPCNewAuction['data']
-          console.log(hash, tx, options)
+          if (auctionController.hasTransaction(hash)) {
+            console.log('Auction for tx', hash, 'already ongoing')
+            return
+          }
+          reportAddressEvent(tx.from!, `Auction: Starting auction for tx ${hash}`)
+          console.log('Starting auction for tx', hash, 'with options', options)
 
           const searcherPayload: PayloadRPCNewAuction = {
             method: METHOD_RPC_NEW_AUCTION,
@@ -69,7 +89,15 @@ router.get('/rpc', (ctx) => {
             registeredSearchers[searcher].send(JSON.stringify(searcherPayload))
           }
 
-          const { hasWinner, bundle } = await auctionController.auctionTransaction(hash, tx, options)
+          const { hasWinner, bundle, bid } = await auctionController.auctionTransaction(hash, tx, options)
+          if (hasWinner) {
+            reportAddressEvent(
+              tx.from!,
+              `Auction: Auction concluded for tx ${hash} with winning bid of ${ethers.utils.formatEther(bid!)}`
+            )
+          } else {
+            reportAddressEvent(tx.from!, `Auction: Auction concluded for tx ${hash} without any bids}`)
+          }
           const auctionResultPayload: PayloadAuctionResult = {
             method: METHOD_AUCTION_RESULT,
             data: hasWinner
@@ -86,7 +114,7 @@ router.get('/rpc', (ctx) => {
           }
 
           ws.send(JSON.stringify(auctionResultPayload))
-          // TODO delete hash from auction controller
+          auctionController.removeTransaction(hash)
         }
       } catch (e) {
         console.error('fail during rpc message', e, m.data)
@@ -103,13 +131,13 @@ router.get('/searcher', (ctx) => {
   }
 
   const address = ctx.request.url.searchParams.get('address')
-  console.log('searcher', address)
+  // console.log('searcher', address)
   if (address) {
     const ws = ctx.upgrade()
     registeredSearchers[address] = ws
 
     ws.onopen = () => {
-      console.log('Connected to searcher')
+      console.log('Connected to searcher', address)
       const searcherBidRecipientPayload: PayloadAuctionBidRecipient = {
         method: METHOD_AUCTION_BID_RECIPIENT,
         data: {
