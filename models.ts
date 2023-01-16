@@ -8,22 +8,31 @@ export class Payment extends Model {
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
-      allowNull: false
+      allowNull: false,
+    },
+    tx: {
+      type: DataTypes.STRING,
+      allowNull: false,
     },
     address: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: false,
     },
     value: {
       type: DataTypes.STRING, // will store BigNumber
-      allowNull: false
+      allowNull: false,
+    },
+    included: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
     },
     deposited: {
       type: DataTypes.BOOLEAN,
-      allowNull: false
+      allowNull: false,
     },
   }
   static defaults = {
-    deposited: false
+    included: false,
+    deposited: false,
   }
 }

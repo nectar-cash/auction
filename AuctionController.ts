@@ -3,13 +3,8 @@ import { BigNumber, BigNumberish, ethers } from './deps.ts'
 import { config } from './deps.ts'
 
 import { AUCTION_DURATION } from './deps.ts'
-import {
-  TransactionIntent,
-  NectarOptions,
-  TransactionBundle,
-  UnknownTransactionBundle,
-  BundleTransactionHash,
-} from './deps.ts'
+import { TransactionIntent, NectarOptions, TransactionBundle, BundleTransactionHash } from './deps.ts'
+import reportAddressEvent from './EventReporter.ts'
 
 interface StoredTransactions {
   [hash: string]: {
@@ -23,6 +18,7 @@ interface Bids {
   [bidder: string]: {
     bundle: TransactionBundle
     bid: BigNumberish
+    bidTx: string
   }
 }
 
@@ -35,6 +31,14 @@ export default class AuctionController {
     this._transactions = {}
   }
 
+  removeTransaction(hash: string) {
+    delete this._transactions[hash]
+  }
+
+  hasTransaction(hash: string) {
+    return hash in this._transactions
+  }
+
   async auctionTransaction(
     hash: string,
     tx: TransactionIntent,
@@ -42,8 +46,8 @@ export default class AuctionController {
   ): Promise<{
     hasWinner: boolean
     bundle: TransactionBundle | undefined
+    bid?: BigNumberish
   }> {
-    // TODO handle repeat / ongoing auctions
     this._transactions[hash] = {
       tx,
       options: options ?? {},
@@ -65,35 +69,39 @@ export default class AuctionController {
     const bid = BigNumber.from(highestBid.bid)
 
     const auctionAddress = env['AUCTION_ADDRESS']
-    const userAddress = tx.from || ethers.constants.AddressZero // TODO check for 'from' before accepting auction
+    const userAddress = tx.from || ethers.constants.AddressZero
     const auctionAllocationValue = bid.mul(5).div(100)
     const userAllocationValue = bid.sub(auctionAllocationValue)
 
     await Payment.create([
       {
+        tx: highestBid.bidTx,
         address: userAddress,
-        value: userAllocationValue.toString()
+        value: userAllocationValue.toString(),
       },
       {
+        tx: highestBid.bidTx,
         address: auctionAddress,
-        value: auctionAllocationValue.toString()
-      }
+        value: auctionAllocationValue.toString(),
+      },
     ])
 
     return {
       hasWinner: true,
       bundle: highestBid.bundle,
+      bid: highestBid.bid,
     }
   }
 
-  bidOnTransaction(bidder: string, bundle: UnknownTransactionBundle) {
+  bidOnTransaction(bidder: string, bundle: TransactionBundle) {
     console.log('Bundle from:', bidder, bundle)
     const auctionAddress = env['AUCTION_ADDRESS']
 
-    let payments = BigNumber.from(0)
+    let payment = BigNumber.from(0)
+    let paymentTx = ''
     let userTxIndex = -1
     for (const [index, item] of bundle.entries()) {
-      if (item.hash) {
+      if ('hash' in item) {
         if (userTxIndex >= 0) {
           console.error('multiple user transactions in bundle')
           return
@@ -101,25 +109,29 @@ export default class AuctionController {
           userTxIndex = index
         }
       }
-      if (item.signedTransaction) {
+      if ('signedTransaction' in item) {
         const parsedTx = ethers.utils.parseTransaction(item.signedTransaction)
-        // console.log('parsed tx', parsedTx)
         if (parsedTx.to && parsedTx.to === auctionAddress && parsedTx.data === '0x') {
-          // console.log('parsed tx data', parsedTx.data)
+          paymentTx = parsedTx.hash || ''
           const txValue = BigNumber.from(parsedTx.value)
-          payments = payments.add(txValue)
+          payment = txValue
         }
       }
     }
 
     const txHash = bundle[userTxIndex] as BundleTransactionHash
     const transaction = this._transactions[txHash.hash]
-    console.log('Bid value:', ethers.utils.formatEther(payments))
+    console.log('Bid value:', ethers.utils.formatEther(payment))
+    reportAddressEvent(
+      transaction.tx.from!,
+      `Auction: Received ${ethers.utils.formatEther(payment)} ETH bid for tx ${txHash.hash}`
+    )
 
     if (transaction && transaction.bids) {
       transaction.bids[bidder] = {
         bundle: bundle as TransactionBundle,
-        bid: payments,
+        bid: payment,
+        bidTx: paymentTx,
       }
       // console.log('added bid', bundle, payments)
     }
@@ -130,6 +142,7 @@ export default class AuctionController {
         bidder: string
         bundle: TransactionBundle
         bid: BigNumberish
+        bidTx: string
       }
     | undefined {
     const transaction = this._transactions[hash]
@@ -138,6 +151,7 @@ export default class AuctionController {
       bidder: ethers.constants.AddressZero as string,
       bundle: [] as TransactionBundle,
       bid: BigNumber.from('0'),
+      bidTx: '',
     }
 
     if (transaction) {
@@ -146,7 +160,7 @@ export default class AuctionController {
         const amount = BigNumber.from(bid.bid)
 
         if (amount.gt(highestBid.bid)) {
-          highestBid = { bidder, bundle: bid.bundle, bid: amount }
+          highestBid = { bidder, bundle: bid.bundle, bid: amount, bidTx: bid.bidTx }
         }
       }
     }
