@@ -1,4 +1,4 @@
-FROM denoland/deno:1.29.1
+FROM denoland/deno:1.29.3
 RUN apt-get update; apt-get install curl -y
 
 EXPOSE 8000
