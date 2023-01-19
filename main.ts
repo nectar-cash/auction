@@ -96,7 +96,7 @@ router.get('/rpc', (ctx) => {
               `Auction: Auction concluded for tx ${hash} with winning bid of ${ethers.utils.formatEther(bid!)}`
             )
           } else {
-            reportAddressEvent(tx.from!, `Auction: Auction concluded for tx ${hash} without any bids}`)
+            reportAddressEvent(tx.from!, `Auction: Auction concluded for tx ${hash} without any bids`)
           }
           const auctionResultPayload: PayloadAuctionResult = {
             method: METHOD_AUCTION_RESULT,
