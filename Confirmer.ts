@@ -18,7 +18,7 @@ const lookupAndHandleTx = async (txhash: string, createdAt: Date) => {
     matchingTxs.forEach((payment: Payment) => {
       reportAddressEvent(
         payment.address as string,
-        `Auction: Payment to Auction tx ${txReceipt.transactionHash} found in block ${txReceipt.blockNumber}}`
+        `Auction: Payment to Auction tx ${txReceipt.transactionHash} found in block ${txReceipt.blockNumber}`
       )
     })
 
